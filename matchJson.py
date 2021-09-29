@@ -184,8 +184,10 @@ class MatchJson:
 
     def appendGamesFrom(self, other, time_gap=1000):
         per_game_arrays = ['gameWinners', 'winConditions', 'mapPool']
+        # truncate mapPool
+        self.data['mapPool'] = self.data['mapPool'][:len(self.data['games'])]
         for key in per_game_arrays:
-            self.data[key].append(other.data[key])
+            self.data[key] += other.data[key]
 
         last_end_time = self.data['games'][-1]['endTime']
         time_offset = last_end_time + time_gap
@@ -211,14 +213,14 @@ class MatchJson:
 
         for game in other.data['games']:
             new_player_stats_dict = dict(map(fix_player, game['playerStats']))
-            new_player_stats = [new_player_stats_dict[idx]
-                                for idx in sorted(new_player_stats_dict.keys)]
+            new_player_stats = [new_player_stats_dict[i]
+                                for i in sorted(new_player_stats_dict.keys())]
 
             new_game = dict(game)
             new_game['playerStats'] = new_player_stats
             new_game['startTime'] += time_offset
             new_game['endTime'] += time_offset
 
-            self['games'].append(new_game)
+            self.data['games'].append(new_game)
 
         self.recomputeMatchStats()
