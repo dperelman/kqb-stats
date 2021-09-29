@@ -41,11 +41,12 @@ class MatchJson:
             res += name + ' team: ' + ', '.join(nicknames) + '\n'
         res += '\nGAMES:\n'
         for idx, game in enumerate(self.data['games']):
-            res += ('Game ' + idx + ': '
+            res += ('Game ' + str(idx) + ': '
                     + team_number[self.data['gameWinners'][idx]]
                     + ' team won by '
                     + win_conditions[self.data['winConditions'][idx]]
-                    + ' on ' + map_names[self.data['mapPool'][idx]])
+                    + ' on ' + map_names[self.data['mapPool'][idx]]
+                    + '\n')
 
         return res
 
@@ -87,6 +88,7 @@ class MatchJson:
             'mostKillsPerLife': 'mostKillsPerLife',
         }
 
+        all_computed_stats = []
         for idx, stats in enumerate(self.data['playerMatchStats']):
             computed_stats = {}
 
@@ -95,8 +97,13 @@ class MatchJson:
 
             allBerriesInSingleGame = False
             per_game_stats = []
-            for game in self.data['games']:
-                game_stats = game['playerStats'][idx]
+            for game_idx, game in enumerate(self.data['games']):
+                try:
+                    game_stats = game['playerStats'][idx]
+                except IndexError:
+                    raise Exception(stats['nickname'] + ' not in '
+                                    + f'game {game_idx}. Players joining '
+                                    + 'mid-match is unsupported.')
                 if game_stats['nickname'] != stats['nickname']:
                     raise Exception("Nickname mismatch: "
                                     + game_stats['nickname']
@@ -113,8 +120,9 @@ class MatchJson:
                 computed_stats[key] = max(g[max_key] for g in per_game_stats)
 
             computed_stats['allBerriesInSingleGame'] = allBerriesInSingleGame
+            all_computed_stats.append(computed_stats)
 
-        return computed_stats
+        return all_computed_stats
 
     # Checks that the playerMatchStats is computed as expected.
     def verifyMatchStats(self):
@@ -140,16 +148,16 @@ class MatchJson:
         num_map_pool = len(self.data['mapPool'])
 
         if num_game_winners != num_games:
-            raise Exception(num_games + ' games, but '
-                            + num_game_winners + ' winner entries.')
+            raise Exception(f'{num_games} games, but '
+                            + f'{num_game_winners} winner entries.')
 
         if num_win_conditions != num_games:
-            raise Exception(num_games + ' games, but '
-                            + num_win_conditions + ' win condition entries.')
+            raise Exception(f'{num_games} games, but '
+                            + f'{num_win_conditions} win condition entries.')
 
-        if num_map_pool > num_games:
-            raise Exception(num_games + ' games, but only '
-                            + num_map_pool + ' map pool entries.')
+        if num_map_pool < num_games:
+            raise Exception(f'{num_games} games, but only '
+                            + f'{num_map_pool} map pool entries.')
 
         win_conditions = {
             1: "Mil",
@@ -161,16 +169,17 @@ class MatchJson:
             win_condition = self.data['winConditions'][idx]
 
             if game_condition != win_condition:
-                raise Exception('Game ' + idx + ' has win condition recorded '
+                raise Exception(f'Game {idx} has win condition recorded '
                                 + 'as both ' + win_conditions[game_condition]
                                 + ' in the game and '
                                 + win_conditions[win_condition]
                                 + ' in the win conditions list.')
 
         if num_games > 5:
-            raise Exception('Match has ' + num_games + ' games. Max is 5.')
-        if self.data['winConditions'].count(1) != 3\
-                and self.data['winConditions'].count(1) != 3:
+            raise Exception(f'Match has {num_games} games. Max is 5.')
+
+        if self.data['gameWinners'].count(1) != 3\
+                and self.data['gameWinners'].count(2) != 3:
             raise Exception('Incomplete match: neither team won 3 games.')
 
     def appendGamesFrom(self, other, time_gap=1000):
