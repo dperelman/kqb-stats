@@ -89,7 +89,8 @@ class MatchJson:
         }
 
         all_computed_stats = []
-        for idx, stats in enumerate(self.data['playerMatchStats']):
+        for stats in self.data['playerMatchStats']:
+            idx = stats['playerIndex']
             computed_stats = {}
 
             for key in copied_stats:
@@ -98,19 +99,18 @@ class MatchJson:
             allBerriesInSingleGame = False
             per_game_stats = []
             for game_idx, game in enumerate(self.data['games']):
-                try:
+                if idx < len(game['playerStats'])\
+                        and game['playerStats'][idx] is not None:
                     game_stats = game['playerStats'][idx]
-                except IndexError:
-                    raise Exception(stats['nickname'] + ' not in '
-                                    + f'game {game_idx}. Players joining '
-                                    + 'mid-match is unsupported.')
-                if game_stats['nickname'] != stats['nickname']:
-                    raise Exception("Nickname mismatch: "
-                                    + game_stats['nickname']
-                                    + " != " + stats['nickname'])
-                per_game_stats.append(game_stats)
-                if game_stats['totalBerryDeposits'] == game['berriesNeeded']:
-                    allBerriesInSingleGame = True
+                    if game_stats['nickname'] != stats['nickname']:
+                        raise Exception('Nickname mismatch in '
+                                        + f'game {game_idx} for player {idx}: '
+                                        + game_stats['nickname']
+                                        + " != " + stats['nickname'])
+                    per_game_stats.append(game_stats)
+                    if game_stats['totalBerryDeposits']\
+                            == game['berriesNeeded']:
+                        allBerriesInSingleGame = True
 
             for key, to_sum in summed_stats.items():
                 computed_stats[key] = sum([sum(g[k] for k in to_sum)
@@ -184,10 +184,10 @@ class MatchJson:
 
     def appendGamesFrom(self, other, time_gap=1000):
         per_game_arrays = ['gameWinners', 'winConditions', 'mapPool']
-        # truncate mapPool
-        self.data['mapPool'] = self.data['mapPool'][:len(self.data['games'])]
         for key in per_game_arrays:
-            self.data[key] += other.data[key]
+            # truncate for mapPool and any junk from a disconnect
+            self.data[key] = self.data[key][:len(self.data['games'])]\
+                    + other.data[key][:len(other.data['games'])]
 
         last_end_time = self.data['games'][-1]['endTime']
         time_offset = last_end_time + time_gap
@@ -200,7 +200,18 @@ class MatchJson:
                                         'playerId', 'externalPlayerId'])
 
         def fix_player(player):
-            example = example_player_stats[player['nickname']]
+            example = example_player_stats.get(player['nickname'])
+            if not example:
+                example = dict(player)
+                example['playerIndex'] = len(example_player_stats)
+                example_player_stats[player['nickname']] = example
+
+                self.data['playerMatchStats'].append(list(
+                    filter(lambda s: s['nickname'] == player['nickname'],
+                           other.data['playerMatchStats']))[0])
+                self.data['profiles'].append(list(
+                    filter(lambda s: s['combinedId'] == player['playerId'],
+                           other.data['profiles']))[0])
 
             fixed_player = {}
             for key in player.keys():
@@ -213,8 +224,8 @@ class MatchJson:
 
         for game in other.data['games']:
             new_player_stats_dict = dict(map(fix_player, game['playerStats']))
-            new_player_stats = [new_player_stats_dict[i]
-                                for i in sorted(new_player_stats_dict.keys())]
+            new_player_stats = [new_player_stats_dict.get(i)
+                                for i in range(len(example_player_stats))]
 
             new_game = dict(game)
             new_game['playerStats'] = new_player_stats
