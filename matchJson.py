@@ -61,6 +61,11 @@ class MatchJson:
         self.recomputeMatchStats()
 
     def recomputedMatchStats(self):
+        def elWithPlayerIndex(arr, idx):
+            for el in arr:
+                if el['playerIndex'] == idx:
+                    return el
+
         copied_stats = [
             'nickname',
             'inputID',
@@ -99,9 +104,8 @@ class MatchJson:
             allBerriesInSingleGame = False
             per_game_stats = []
             for game_idx, game in enumerate(self.data['games']):
-                if idx < len(game['playerStats'])\
-                        and game['playerStats'][idx] is not None:
-                    game_stats = game['playerStats'][idx]
+                if elWithPlayerIndex(game['playerStats'], idx) is not None:
+                    game_stats = elWithPlayerIndex(game['playerStats'], idx)
                     if game_stats['nickname'] != stats['nickname']:
                         raise Exception('Nickname mismatch in '
                                         + f'game {game_idx} for player {idx}: '
@@ -112,15 +116,18 @@ class MatchJson:
                             == game['berriesNeeded']:
                         allBerriesInSingleGame = True
 
-            for key, to_sum in summed_stats.items():
-                computed_stats[key] = sum([sum(g[k] for k in to_sum)
-                                           for g in per_game_stats])
+            if len(per_game_stats) > 0:
+                for key, to_sum in summed_stats.items():
+                    computed_stats[key] = sum([sum(g[k] for k in to_sum)
+                                               for g in per_game_stats])
 
-            for key, max_key in max_stats.items():
-                computed_stats[key] = max(g[max_key] for g in per_game_stats)
+                for key, max_key in max_stats.items():
+                    computed_stats[key] = max(g[max_key]
+                                              for g in per_game_stats)
 
-            computed_stats['allBerriesInSingleGame'] = allBerriesInSingleGame
-            all_computed_stats.append(computed_stats)
+                computed_stats['allBerriesInSingleGame'] =\
+                    allBerriesInSingleGame
+                all_computed_stats.append(computed_stats)
 
         return all_computed_stats
 
@@ -224,8 +231,10 @@ class MatchJson:
 
         for game in other.data['games']:
             new_player_stats_dict = dict(map(fix_player, game['playerStats']))
-            new_player_stats = [new_player_stats_dict.get(i)
-                                for i in range(len(example_player_stats))]
+            new_player_stats =\
+                [new_player_stats_dict.get(idx)
+                 for idx in sorted([ex['playerIndex']
+                                    for ex in example_player_stats.values()])]
 
             new_game = dict(game)
             new_game['playerStats'] = new_player_stats
